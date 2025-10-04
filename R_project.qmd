@@ -1,0 +1,614 @@
+---
+title: "trabalho_introR"
+execute: 
+  warning: false
+  include: true
+author: "Maria Teresa Mendes Madureira"
+format: html
+editor: visual
+---
+
+# poverty, data transfers gender inequality- an analysis of time distribution inside families of Mexico
+
+[Introduction to Progresa and the database.]
+
+[Some necessary information about the main variables.]
+
+[Cleaning the dataset and uploading libraries]
+
+[Variable dictionary]
+
+[Understanding family income]
+
+[Understanding time distribution]
+
+[Next steps]
+
+## Introduction to Progresa and the database.
+
+Mexico is similar to Brazil in many ways. Both countries face similar challenges in poverty, gender inequality and integrating families from isolated regions into the national economic network. They also have a similar solution to some of these problems- conditional cash transfer programs. Mexico has a very close equivalent to our "Bolsa Família", which was originally called "Progresa". Although "Progresa" is its original name, the program went through many rebrandings through the years, and is also known as "Oportunidades" and "Prospera". Currently, what we understand as Progresa functions under the many programs coordenated by the Secretaria de Bienestar.
+
+Progresa, like Bolsa Familia, is a conditional cash transfer, and requires minors to be enrolled in school, make yearly visits to the doctor and be fully vaccinated. However, its target audience is slightly different from Bolsa Familia's. Progresa targets families in isolated areas, and so in addition to individual poverty participants must also belong to marginalized regions. The way cities and villages are categorized is not fully disclosed to the public, but it is known it is a mixture of access to basic infrastructure, average income percapita and expenditure on different goods.
+
+Here, I will explore variables affecting time and income distribution, and analyse the impact that progresa had on poorer families. I will focus on women and underage girls.
+
+### Accessing the database
+
+The datasets used to be available in the progresa website, before the program went through an agressive rebranding. I will use data from 2008. At that point, the program had been active for 18 years. Currently, social programs including what we understand as progresa can be found under "Bienestar".
+
+I use five datasets-
+
+1.  Hogares- information on basic infrastructure and household
+
+2.  Poplación- information on the individual
+
+3.  Ingreso- information on sources of income
+
+4.  Concentrado- general information
+
+5.  trabajo- information on jobs and work-related income
+
+#### technical information:
+
+#### [Bienestar website](https://www.gob.mx/becasbenitojuarez)
+
+r version- R 4.5.1
+
+reference year- 2008
+
+## Some necessary information about the main variables.
+
+### Conapo
+
+Conapo is the way policy-makers classify towns and villages. It is a technical classification, so the alterations I make for it to become more intuitive do not harm the comprehension of my observations in any way. Conapo ranges from Highly Marginalized town (1) to Not marginalized (5).
+
+Marginalization is a combination of different variables, amongst them avg expenditure, access to different forms of infrastructure, and income. The exact calculation does not seem to be publically available. Conapo already takes into account geographic discrimination, so what I classify here as larger towns are not below 3 in the Conapo scale.
+
+### Progresa
+
+Although I compared progresa to bolsa familia, they have one relevant difference- progresa was born as a rural-focused program, so the data transfer is available only to people from Conapo\<3 towns. Aditionally, the income per capita of family members needs to be below 900 mexican pesos.
+
+The program's requirements aside from income/region are similar to bolsa familia's- children must be in school, vaccinated and go on yearly visits to the doctors. To account for gender inequality and combat the issue of women leaving school earlier than men, progresa transfers a larger amount to families with daughters enrolled in school.
+
+### Time expenditure
+
+Follows the categories of time distribution I use here. These will be measured in minutes and are available for anyone above 8 years old:
+
+-   Fetching water
+
+-   care taking
+
+-   household chores
+
+-   free time
+
+-   maintenance
+
+### Household expenditure distribution
+
+Here, I will work with the percentage of each good in relation to the total household consumption. I focus on the following categories:
+
+-   food
+
+-   clothes
+
+-   education
+
+-   transportation
+
+-   personal
+
+## Cleaning the dataset and uploading libraries
+
+Before any analysis, I load all the libraries and datasets, and transform the variables into the formats described above.
+
+```{r}
+#| results: "hide"
+#loading all the necessary libraries
+library(readstata13)
+library(dplyr)
+library(stargazer)
+library(ggplot2)
+library(tidyr)
+library(tidyverse)
+```
+
+Here I import and clean any and all necessary dataframes, merging them into a single df which will be the only one used throughout the project.
+
+```{r}
+#| results: "hide"
+#importing the necessary datasets
+# Here, the user sets the adress to wherever the databases are in their computer
+setwd("C:\\Users\\alm\\Dropbox\\ENIGH analysis\\2008\\Data")
+
+# calling the datasets by name
+library(readstata13)
+file_pop  <- read.dta13("NCV_Poblacion_2008_concil_2010.dta", convert.factors = FALSE)
+file_hog  <- read.dta13("NCV_Hogares_2008_concil_2010.dta", convert.factors = FALSE)
+file_conc <- read.dta13("NCV_Concentrado_2008_concil_2010.dta", convert.factors = FALSE)
+file_trab <- read.dta13("NCV_Trabajos_2008_concil_2010.dta", convert.factors = FALSE)
+file_ing  <- read.dta13("NCV_Ingresos_2008_concil_2010.dta", convert.factors = FALSE)
+
+#since the datasets are extremely large, it would be impractical to import all the columns. Here I only import the ones I will need.
+
+new_data_ing<-file_ing[,c("folioviv","foliohog","numren","clave","ing_tri")]
+new_data_pop <- file_pop[, c("folioviv","foliohog","numren","sexo","parentesco","edad","edo_salud","lengua6","alfabe","asis_esc","nivel","beca","edocony","redsoc_1","redsoc_3","redsoc_6","min_1","hor_1","min_2","hor_2","min_3","hor_3","min_4","hor_4","min_5","hor_5","hijos_viv","trabajo","bustrab_1","bustrab_4","bustrab_5")]
+new_data_hog<-file_hog[, c("folioviv","foliohog","claviv","agua13","lavad","pileta","residentes","conapo")]
+new_data_conc<-file_conc[,c("folioviv","foliohog","ingcor","ingtrab","sexo","estrato","conapo","ed_formal","tam_hog","hombres","mujeres","tot_hom","tot_muj","n_ocup","beca","bene_gob","vestido","educacion","personal","alimentos","salud","mante","limpieza","transporte","vivienda","smg")]
+new_data_trab<-file_trab[,c("folioviv","foliohog","numren","htrab")]
+
+
+#pegando só o progresa e deixando a base compreensível 
+progresa_info <- new_data_ing %>% 
+  filter(clave == "P042") %>% 
+  select(folioviv, numren, ing_tri) %>% 
+  mutate(progresa = "progresa") 
+progresa_flag <- new_data_ing %>% 
+  distinct(folioviv, numren) %>% 
+  left_join(progresa_info, by = c("folioviv", "numren"))
+
+
+#in order for us to only work with a single database, I merge all of them while making sure that no lines repeat themselves
+
+#juntando tudo em uma só base
+new_data_conc<-new_data_conc%>%
+  rename(sexo_chefe=sexo)
+merged1 <- merge(new_data_pop, new_data_trab, by = c("folioviv", "foliohog","numren"),all.x = TRUE)
+merged2<-merge(merged1, new_data_hog, by=c("folioviv","foliohog"),all.x = TRUE)
+merged3<-merge(merged2, progresa_info, by=c("folioviv","numren"),all.x = TRUE)
+final_base <- merge(merged3, new_data_conc, by = c("folioviv", "foliohog"),all.x = TRUE)
+
+ 
+final_base$asis_esc <- factor(final_base$asis_esc,
+                              levels = c(1, 2), 
+                              labels = c("Sim", "Não"))
+final_base$sexo <- factor(final_base$sexo, 
+                          levels = c(1, 2), 
+                          labels=c("Menino","Menina"))
+final_base$sexo_chefe <- factor(final_base$sexo_chefe, 
+                                levels = c(1, 2), 
+                                labels=c("homem","mulher"))
+
+# Here I rename some columns with more intuitive names
+final_base <- final_base %>%
+  rename(
+    lar=foliohog,
+    infovivienda=claviv,
+    acesso_agua=agua13,
+    conapo=conapo.x,
+    sua_saude=edo_salud,
+    lingua_indigena=lengua6,
+    ganha_bolsa=beca.x,
+    sit_conjugal=edocony,
+    conapo2=conapo.y,
+    numero_trabalhadores=n_ocup,
+    valor_bolsa=beca.y,
+    renda_tot=ingcor
+  )
+
+
+#since I will work with time expenditure, I transform everything here into minutes and transform the "99", which means "no time spent" into 0.
+
+final_base[, c("hor_4", "min_4", "hor_5","min_5","hor_1","min_1","hor_2","min_2","hor_3","min_3")] <- lapply(final_base[, c("hor_4", "min_4", "hor_5","min_5","hor_1","min_1","hor_2","min_2","hor_3","min_3")], function(x) ifelse(x == 99, 0, x))
+
+final_base[, c("hor_4", "hor_5","hor_1","hor_2","hor_3")] <- final_base[, c("hor_4", "hor_5","hor_1","hor_2","hor_3")]*60
+final_base$tempo_cuida<-final_base$hor_1+final_base$min_1
+final_base$tempo_repara<-final_base$hor_2+final_base$min_2
+final_base$tempo_domestico<-final_base$hor_3+final_base$min_3
+final_base$tempo_agua<-final_base$hor_4+final_base$min_4
+final_base$tempo_prazer<-final_base$hor_5+final_base$min_5
+
+
+#The conapo nomencalture is messy (it doesn't have an ascending or a descending order) so I sort the marginalization levels into descending order, 1 being the most marginalized and 5 being not marginalized at all. It is worth remembering that "conapo" is a classification of a city or village, not of a family. I also classify the size of a certain village. I do this to check that all progresa receivers are from smaller communities.
+
+final_base$conapo<-final_base$conapo*10
+final_base$conapo[final_base$conapo==10]<-2
+final_base$conapo[final_base$conapo==20]<-4
+final_base$conapo[final_base$conapo==30]<-3
+final_base$conapo[final_base$conapo==40]<-1
+final_base$conapo[final_base$conapo==50]<-5
+final_base$estrato[final_base$estrato==1]<-"tam>100k"
+final_base$estrato[final_base$estrato==2]<-"15k<tam<100k"
+final_base$estrato[final_base$estrato==3]<-"2,5k<tam<15k"
+final_base$estrato[final_base$estrato==4]<-"tam<2,5k"
+final_base$redsoc_1[final_base$redsoc_1==5]<-2.5
+final_base$redsoc_3[final_base$redsoc_3==5]<-2.5
+final_base$redsoc_6[final_base$redsoc_6==5]<-2.5
+
+
+#since I will work with expenditure distribution inside a household, I transform the specific categories into percentages of the total expenditure.
+
+final_base <- final_base %>%
+  mutate(porcent_vest = vestido / (renda_tot), porcent_edu=educacion/(renda_tot))
+final_base<-final_base%>%
+  mutate(porcent_vest=vestido/renda_tot,porcent_edu=educacion/renda_tot,porcent_sld= salud/(renda_tot), porcent_trans=transporte/(renda_tot),porcent_pers=personal/(renda_tot), porcent_ali=alimentos/(renda_tot), porcent_viv=vivienda/(renda_tot), porcent_limp=limpieza/(renda_tot), porcent_man=mante/(renda_tot))
+
+
+#Here I differentiate different marital statuses. I want to observe how being single vs married may impact our results, but since the database has categories like "stable union" and "widowed", I transform all of those into either "solteiro" or "casado".
+
+final_base <- final_base %>%
+  mutate(sit_conjugal_chefe = ifelse(parentesco == 101, sit_conjugal, NA))
+final_base$sit_conjugal_chefe[final_base$sit_conjugal_chefe==1]<-'casado'
+final_base$sit_conjugal_chefe[final_base$sit_conjugal_chefe==5]<-'casado'
+final_base$sit_conjugal_chefe[final_base$sit_conjugal_chefe==2]<-'solteiro'
+final_base$sit_conjugal_chefe[final_base$sit_conjugal_chefe==3]<-'solteiro'
+final_base$sit_conjugal_chefe[final_base$sit_conjugal_chefe==4]<-'solteiro'
+final_base$sit_conjugal_chefe[final_base$sit_conjugal_chefe==6]<-'solteiro'
+final_base$estrato[final_base$estrato==1]<-"tam>100k"
+final_base$estrato[final_base$estrato==2]<-"15k<tam<100k"
+final_base$estrato[final_base$estrato==3]<-"2,5k<tam<15k"
+final_base$estrato[final_base$estrato==4]<-"tam<2,5k"
+
+
+
+#here I eliminate a few columns I have already compiled into other (more relevant) columns, so that the original ones are no longer useful.
+
+final_base[,c("lavad","pileta","acesso_agua","lingua_indigena","bustrab_1","bustrab_4","bustrab_5","hombres","mujeres","min_1","min_2","min_3","min_4","min_5","hor_1","hor_2","hor_3","hor_4","hor_5","educacion",'salud',"transporte","vivienda","personal","limpieza","alimentos","vestido","mante")] <- list(NULL)
+
+
+base_chefes <- final_base %>%
+  filter(!is.na(sit_conjugal_chefe))
+base_chefes$estrato[base_chefes$estrato==1]<-4
+base_chefes$estrato[base_chefes$estrato==2]<-3
+base_chefes$estrato[base_chefes$estrato==3]<-2
+base_chefes$estrato[base_chefes$estrato==4]<-1
+base_chefes$redsoc_6[base_chefes$redsoc_6==5]<-2.5
+base_chefes$redsoc_1[base_chefes$redsoc_1==5]<-2.5
+base_chefes$redsoc_3[base_chefes$redsoc_3==5]<-2.5
+
+base_chefes <- base_chefes %>%
+  mutate(sex_sit = paste(sexo_chefe, sit_conjugal_chefe, sep = " "))
+
+
+
+#Here, I attribute family titles to each member of the family to check how they relate to each other. All codenumbers used can be found in the dictionary linked in the introduction. I also create a new variable sexo_chefe. More information about this variable may be found in the variable dictionary.
+
+final_base<-final_base%>%
+  mutate(sex_sit=paste(sexo_chefe, sit_conjugal_chefe, sep = " "))
+base_chefes[, c("sexo","sit_conjugal","conapo2","hijos_viv","ingtrab","parentesco","sit_conjugal_chefe","sexo_chefe")] <-list(NULL)
+
+
+final_base$parentesco[final_base$parentesco==101]<- "chefe"
+final_base$parentesco[final_base$parentesco %in% 201:203] <- "partner"
+final_base$parentesco[final_base$parentesco %in% 301:305] <- "filho(a)"
+final_base$parentesco[final_base$parentesco %in% 401:412] <- "trabalhador(a)"
+final_base$parentesco[final_base$parentesco %in% 601:623] <- "outro parente"
+base_chefes$porcent_trans[base_chefes$porcent_trans>1]<-"i"
+
+
+#since my focus is family dynamics, here I create the database I will use from now on. It includes only families with children (that is, one "chefe" and at least one "filho(a)", aside from other possible participants). I used Chat-GPT here.
+
+# First, find all families that have at least one son or daughter
+families_with_children <- final_base %>%
+  filter(parentesco %in% c("filho(a)")) %>%
+  distinct(folioviv)
+
+# Then, keep only rows from those families in the main dataset
+df_with_children <- final_base %>%
+  semi_join(families_with_children, by = "folioviv")
+df_with_children$sex_sit["homem casado"<-"casado"]
+
+# Step 1: Extract the sex_sit of the chief per family
+sex_sit_by_family <- df_with_children %>%
+  filter(parentesco == "chefe") %>%
+  select(folioviv, sex_sit_chefe = sex_sit)
+
+# Step 2: Join it back to the full dataset and optionally tag the chief
+df_with_children <- df_with_children %>%
+  left_join(sex_sit_by_family, by = "folioviv") %>%
+  mutate(
+    sex_sit_final = ifelse(parentesco == "chefe",
+                           paste0(sex_sit_chefe, " (chief)"),
+                           sex_sit_chefe)
+  )
+
+df_with_children$sex_sit_final[df_with_children$sex_sit_final=='homem casado']<-"married"
+df_with_children$sex_sit_final[df_with_children$sex_sit_final=='mulher casado']<-"married"
+df_with_children$sex_sit_final[df_with_children$sex_sit_final=='homem casado (chief)']<-"married (chefe)"
+df_with_children$sex_sit_final[df_with_children$sex_sit_final=='mulher casado']<-"married (chefe)"
+
+#getting rid of a few variables and dfs I won't use in this specific project
+df_with_children[,c("sit_conjugal_chefe","sex_sit","ingtrab","conapo2","ed_formal","smg","sexo_chefe","numero_trabalhadores","hijos_viv","sua_saude","sex_sit_chefe")]<-list(NULL)
+rm(base_agua, base_chefes, file_hog, file_ing, file_pop, file_trab, merged1, merged2, merged3,duplicatas,file_conc, final_base,final_base_sem_duplicatas,menores_progresa,new_data_hog,new_data_pop)
+
+
+#Double checking that there are no duplicate lines and deleting them. I used chat gpt here.
+
+# 1. Contar quantas vezes cada linha aparece
+duplicatas <- df_with_children %>%
+  group_by(across(everything())) %>%
+  summarise(freq = n(), .groups = "drop") %>%
+  arrange(desc(freq))
+
+# Mostrar só as linhas duplicadas
+duplicatas %>% filter(freq > 1)
+
+# 2. Eliminar duplicatas (mantendo apenas uma ocorrência de cada linha)
+final_base_sem_duplicatas <- df_with_children %>%
+  distinct()
+
+# Conferir se deu certo
+nrow(df_with_children)            # número de linhas original
+nrow(final_base_sem_duplicatas) # número de linhas sem duplicadas
+
+
+df_with_children<-final_base_sem_duplicatas
+
+
+df_with_children <- df_with_children %>%
+  mutate(sex_sit_final = if_else(
+    parentesco == "partner" & sex_sit_final == "married",
+    "married (partner)",
+    sex_sit_final
+  ))
+df_with_children <- df_with_children %>%
+  mutate(sex_sit_final = if_else(
+    sexo=="Menina" & sex_sit_final == "married (chief)",
+    "married (partner)",
+    sex_sit_final
+  ))
+df_with_children <- df_with_children %>%
+  mutate(sex_sit_final = if_else(
+    sexo=="Menina" & sex_sit_final =="married (partner)",
+    "married woman",
+    sex_sit_final
+  ))
+
+df_with_children <- df_with_children %>%
+  group_by(folioviv) %>%
+  mutate(
+    ingr_tri = if_else(
+      # if mother is partner
+      (sexo == "Menina" & parentesco == "partner") |
+      # if mother is chefe and there is no partner
+      (sexo == "Menina" & parentesco == "chefe" &
+         !any(sexo == "Menina" & parentesco == "partner")),
+      sum(ing_tri, na.rm = TRUE),
+      NA_real_
+    )
+  ) %>%
+  ungroup()
+df_with_children$ing_tri<-df_with_children$ingr_tri
+df_with_children$ing_tri[df_with_children$ing_tri==0.00]<-NA
+df_with_children[,c("alfabe","nivel","sit_conjugal","residentes","infovivienda")]<-list(NULL)
+rm(base_agua, base_chefes, file_hog, file_ing, file_pop, file_trab, merged1, merged2, merged3,duplicatas,file_conc, final_base,final_base_sem_duplicatas,menores_progresa,new_data_hog,new_data_pop, new_data_ing,aprovados,mulheres_aprovadas,new_data_conc,new_data_trab,pessoas,progresa_flag,progresa_info,sex_sit_by_family,turma)
+
+df_with_children <- df_with_children %>%
+  group_by(folioviv) %>%
+  mutate(
+    progresa = ifelse(any(!is.na(ing_tri)), "progresa", NA)
+  ) %>%
+  ungroup()
+
+
+#Here, I wanted to create a group to which I could safely compare progresa receivers to non-progresa receivers, and I chose to do so by comparing them to those who had slightly higher monthly income per capita.
+
+df_with_children <- df_with_children %>%
+  group_by(folioviv) %>%
+  mutate(
+    family_size = n(),  # number of members in the household
+    ing_percap = renda_tot / family_size  # income per capita
+  ) %>%
+  ungroup()
+
+#to make the analysis easier, I created a column containing the marital status of each family chief (and their possible partner)
+df_with_children <- df_with_children %>%
+  group_by(folioviv) %>%
+  mutate(
+    # does this household have a partner?
+    has_partner = any(parentesco == "partner"),
+    marital_status = case_when(
+      parentesco == "chefe" & has_partner ~ "not_single",
+      parentesco == "partner"             ~ "not_single",
+      parentesco == "chefe" & !has_partner ~ "single",
+      TRUE ~ "not_relevant"
+    )
+  ) %>%
+  ungroup() %>%
+  select(-has_partner)
+
+```
+
+## Variable dictionary
+
+```{r}
+library(gt)
+vars <- data.frame(
+  Variável = names(df_with_children),
+  Tipo = sapply(df_with_children, function(x) class(x)[1]),
+  Descrição= c("a 6 digit code unique to each household.","-","ennumerates household members","individual's gender","individual's relation to house chief","individual's age","whether individual is enrolled in school","whether the individual has a scholarship","on a scale of 1-6, how much help could this individual get on a medical emergency","---- family emergency","---- another emergency","whether the individual works","how many hours the individual works","the conapo category of the individual's town","total family progresa transfers. Appears only in the mother's collumn.","whether the individual receives progresa transfers","total family income","size of individual's town","number of individuals in the household","number of men in the household","number of women in the household","individual's scholarship, if they receive it","same as ing_tri, but distributed among all family recipients","minutes per week spent on caretaking","minutes per week spent on maintenance","minutes per week spent on housework","minutes per week spent fetching water","free time in minutes per week","% of income spent on clothing","% of income spent on education","% of income spent on health","% of income spent on transportation","% of income spent on personal expenses","% of income spent on food","percent of income spent on house maintenance","percent of income spent on cleaning","percent spent on other","if family chief married, single man or single woman","used to create another variable","used to create another variable","income percapita","Marital status"),
+  stringsAsFactors = FALSE
+)
+vars %>%
+  gt() %>%
+  tab_header(
+    title = "Glossário de Variáveis"
+  ) %>%
+  tab_options(
+    table.font.size = "small", # tamanho da fonte
+    data_row.padding = px(3)   # compactar linhas
+  )
+
+```
+
+## Understanding family income
+
+Many things can affect the way a family chooses to distribute its resources- from the bargaining power of each member, to their income. The aim of this section is to observe how different factors influence family income, so that later we can relate these factors to different ways these families may choose to distribute said income. In order for me to better understand what is behind income, I run a multiple regression.
+
+Since this regression is under family income and not salary, gender (for example) does not seem to have a statistically significant impact. What does have significant impact is the interaction between marital status and gender. What this impact shows us, is that, among single income families, families with a single mother have in fact lower income than families with a single father. Evidently, double-income families tend to earn more than any and all configurations of single-income families.
+
+```{r}
+dados_subset<-subset(df_with_children, parentesco %in% c("chefe","partner") & renda_tot>0 & is.finite(df_with_children$renda_tot),)
+```
+
+```{r}
+reg1<-lm(log(renda_tot)~edad+sexo*marital_status+conapo+porcent_ali, data  =dados_subset, na.action = na.omit)
+stargazer(reg1, type = "text", title = "Regression on familial income. NOT SALARY")
+```
+
+Married women have larger familial income than single women. This difference justifies observing married women and single women separately. Furthermore, families with lower income tend to prioritize basic necessities like food, and because they earn less, a bigger fraction of their income goes toward it. This explains why expenditure on food shows up in the regression as having a positive impact. It also tells us we can use high fractions of food expenditures as a proxy for lower income per capita.
+
+Although this project is not focused on expenditure distribution, but rather on time distribution, understanding what characteristics impact income negatively can help characterize the demographic of Progresa recipients, and understand who is more susceptible to income vulnerability and therefore targeted by Progresa to receive the cash transfers.
+
+## Understanding time distribution
+
+The way a person chooses to spend their time says much about the commodities they have access to, the challenges they face and the impact of the public policies that target them. A further look into underage girls time distribution compared to boys' would shine some much needed light on the origin of gender inequalities, especially when it comes to how each gender spends their time at home. After all, it is not only after marriage that girls start contributing more to housework- that pattern has been formed by chidhood behavior and by observing how parents distribute chores. Therefore, it is important to know at what point gender starts making a difference.
+
+### a general view 
+
+```{r}
+library(tidyverse)
+
+# Filtra até 18 anos e transforma para formato longo
+df_long <- df_with_children %>%
+  filter(edad < 18) %>%
+  pivot_longer(cols = tempo_cuida:tempo_prazer, names_to = "atividade", values_to = "tempo") %>%
+  filter(!is.na(tempo), !is.na(sexo))
+
+# Calcula a média de tempo por gênero e atividade
+df_media <- df_long %>%
+  group_by(sexo, atividade) %>%
+  summarise(media_tempo = mean(tempo, na.rm = TRUE), .groups = "drop")
+
+# Define os rótulos das atividades
+atividades_labels <- c(
+  tempo_cuida = "caretaking",
+  tempo_repara = "other chores",
+  tempo_domestico="housework",
+  tempo_agua = "fetching water",
+  tempo_prazer = "tempo livre"
+)
+
+# Gera o gráfico
+ggplot(df_media, aes(x = atividade, y = media_tempo, fill = sexo)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_x_discrete(labels = atividades_labels) +
+  theme_minimal() +
+  labs(title = "average time spent per activity (under 18 years old), per gender",
+       x = "activity",
+       y = "avg time (minutes)",
+       fill = "gender")
+
+```
+
+Female-centered activities (caretaking and housework) present a gender gap, while both men and women spend little time on male-dominated activities. Therefore, men have slightly more free time than women.
+
+This graph is limited to underage boys and girls, but in future versions of this project it would be desirable to allow the viewer to choose which age group they would like to observe.
+
+### Linear regression on Time spent on housework
+
+To better understand what is behind the housework gap, a linear regression can help us.
+
+```{r}
+#aqui
+dados_subs<-subset(df_with_children, parentesco %in% c("chefe","filho(a)","partner"), edad<20)
+reg1<-lm(tempo_domestico~asis_esc*sexo+ing_percap+edad+conapo+tot_muj+parentesco+marital_status+marital_status:sexo, data  =dados_subs)
+stargazer(reg1, type = "text", title = "Regression on time spent on housework, for population under 20")
+```
+
+Here, we confirm what was previously suspected- that the main factor behind time spent doing housework is gender. However, not going to school whilst being a girl also plays an important part. In mexico, young girls tend to leave school earlier than boys because gender biases make female education seem futile. Progresa combats this issue by giving larger cash transfers to families who keep daughters in school.
+
+This calls into question how efficient Progresa is at altering time distributions.
+
+### Progresa's impact on time distribution
+
+```{r}
+#it is necessary to limit income per capita, or else higher income can make progresa look like it has negative impact. Since people who are close to qualifying but do not qualify for progresa because their income isn't low enough are included, some effects of progresa may be underestimated here.
+
+#first, I filter the individuals I want in the chart
+f1 <- df_with_children %>%
+  filter(sexo == "Menina", conapo<=2,ing_percap<1000, edad<=18, edad>10)
+#differentiating progresa receivers from non-receivers
+f2 <- f1 %>%
+  mutate(group = ifelse(!is.na(progresa), "Receives Progresa", "Does not receive"))
+
+#Here I relate the groups I created to the time distribution variables
+f3 <- f2 %>%
+  select(group, tempo_cuida:tempo_prazer) %>%
+  pivot_longer(cols = tempo_cuida:tempo_prazer, names_to = "activity", values_to = "pct_time")
+#here I name the time columns
+f3 <- f3 %>%
+  mutate(activity = recode(activity,
+                           "tempo_cuida" = "caretaking",
+                           "tempo_domestico" = "cleaning",
+                           "tempo_repara" = "other",
+                           "tempo_prazer" = "leisure",
+                           "tempo_agua"= "getting water"))
+#I extract the mean of each category
+avg_time <- f3 %>%
+  group_by(group, activity) %>%
+  summarise(avg_pct_time = mean(pct_time, na.rm = TRUE), .groups = "drop")
+#create the chart itself
+ggplot(avg_time, aes(x = activity, y = avg_pct_time, fill = group)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("Receives Progresa" = "#1f77b4", "Does not receive" = "#ff7f0e")) +
+  labs(
+    title = "Average Time Allocation for girls between 10 and 18, conapo < 3, income percapita<1000 pesos",
+    x = "Activity",
+    y = "Average minutes per week",
+    fill = "Family Progresa Status"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+The bigger difference for underage girls seems to be the time spent on housework. However, mothers are also affected by progresa's focus on young girls. With the compulsory school attendance, women likely have more time to work outside of their home. They might, however, have to make up for the help their daughters have now stopped giving.
+
+```{r}
+#I do the same thing here as in the last chart, except this one is focused on mothers
+sisters <- df_with_children %>%
+  filter(sexo == "Menina", conapo<=2,ing_percap<1000, parentesco %in% c("chefe","partner"))
+
+sisters_with_1_brother <- sisters %>%
+  mutate(group = ifelse(!is.na(progresa), "Receives Progresa", "Does not receive"))
+
+sisters_long <- sisters_with_1_brother %>%
+  select(group, tempo_cuida:tempo_prazer) %>%
+  pivot_longer(cols = tempo_cuida:tempo_prazer, names_to = "activity", values_to = "pct_time")
+
+sisters_long <- sisters_long %>%
+  mutate(activity = recode(activity,
+                           "tempo_cuida" = "caretaking",
+                           "tempo_domestico" = "cleaning",
+                           "tempo_repara" = "other",
+                           "tempo_prazer" = "leisure",
+                           "tempo_agua"= "getting water"))
+
+avg_time <- sisters_long %>%
+  group_by(group, activity) %>%
+  summarise(avg_pct_time = mean(pct_time, na.rm = TRUE), .groups = "drop")
+
+ggplot(avg_time, aes(x = activity, y = avg_pct_time, fill = group)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("Receives Progresa" = "#1f77b4", "Does not receive" = "#ff7f0e")) +
+  labs(
+    title = "Average Time Allocation for mothers, conapo < 3, income percapita<1000 pesos",
+    x = "Activity",
+    y = "Average minutes per week",
+    fill = "Family Progresa Status"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+It is important to note that here, there is no differentiation between married or single women, since in the next steps I plan on allowing the viewer to select which group they want to view a chart on.
+
+Progresa's conditional cash transfer is able to change time distribution for all ages. Young girls do less housework, presumably because they have compulsory attendance rates in school, and are not allowed to abandon their education. Mothers, in turn, spend less time on caretaking, since their children (of all ages) are going to school. As we can see, their leisure time does not change, presumably because they are taking up other obligations during that free time.
+
+### 
+
+## Next steps
+
+More complex and interactive graphs where the reader is able to select which information they may want to access, and in which format. (Our World in Data style).
+
+When it comes to the linear regression specifically, I would like for anyone accessing the project to do the following:
+
+1.  given an "explained" variable, like time spent on housework, the user should be able to pick from a list of explanatory variables and be given visual insights into how the explanatory variable affects the explained variable.
+
+2.  given a level variable, the user should be able to filter the levels included in the analysis
+
+3.  given a continuous variable, the user should be able to select intervals to observe
+
+4.  these functions should interact among themselves
+
+5.  the user should be able to choose between different types of data representation
+
+Furthermore, it would be ideal to expand upon expenditure distribution as well, and not be restricted to time distribution.
